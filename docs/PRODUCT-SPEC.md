@@ -25,7 +25,7 @@ The canonical product terms are defined in [CONTEXT.md](../CONTEXT.md).
 
 - Product name: Action Script Picker
 - Bundle identifier: `com.austinpresley.ActionScriptPicker`
-- Version: `1.0.0`
+- Version: `1.1.0`
 - Build: `1`
 - Copyright: `Copyright © 2026 Austin Presley`
 - License: MIT
@@ -153,11 +153,11 @@ The main interface has:
 - An action-set sidebar.
 - A searchable action list.
 - A read-only AppleScript preview.
-- A toolbar target picker.
-- A toolbar Photoshop status indicator.
-- Refresh and Copy Script controls.
+- A left-side toolbar group with the target picker, Photoshop status, and Refresh.
+- A Buy me a coffee link to `buymeacoffee.com/apresley` at the right of the toolbar.
+- One Copy Script control below the preview.
 
-At compact widths, the window title hides and Refresh becomes icon-only so Copy Script remains directly available instead of moving into the toolbar overflow menu. Scrolling content begins below the titlebar at every window size.
+At compact widths, the window title hides and Refresh remains icon-only. Scrolling content begins below the titlebar at every window size.
 
 The preview uses selectable monospaced text, native system colors, and line wrapping. Version 1 has no syntax highlighting and no editable script state.
 

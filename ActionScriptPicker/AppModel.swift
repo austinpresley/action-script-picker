@@ -79,6 +79,9 @@ final class AppModel: ObservableObject {
     private var copyResetTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private var started = false
+#if UI_FIXTURE
+    private var visualFixtureCatalog: ActionCatalog?
+#endif
 
     init(
         discovery: any TargetDiscovering = PhotoshopTargetDiscovery(),
@@ -94,6 +97,9 @@ final class AppModel: ObservableObject {
 #if DEBUG || UI_FIXTURE || TESTING
     convenience init(uiFixture catalog: ActionCatalog) {
         self.init(discovery: PhotoshopTargetDiscovery(roots: []))
+#if UI_FIXTURE
+        visualFixtureCatalog = catalog
+#endif
 
         let targetURL = URL(fileURLWithPath: "/Applications/Adobe Photoshop 2026/Adobe Photoshop 2026.app")
         let target = PhotoshopTarget(
@@ -191,6 +197,25 @@ final class AppModel: ObservableObject {
         status == .connected && !snapshot.isStale && generatedScript != nil && !isBusy
     }
 
+    /// What the generative mark is a fingerprint of. Two different action references must never
+    /// produce the same token, so the two names are joined by a character neither can contain.
+    var ribbonSignatureToken: String {
+        // Nothing selected still deserves a mark, so the app signs with its own sentence. This
+        // is a seed, not display text, and must not be localized: the shape has to be the same
+        // one everywhere.
+        guard let selectedSet else { return "An action. A script." }
+        guard let selectedAction else { return selectedSet.name }
+        return "\(selectedSet.name)\u{1}\(selectedAction.name)"
+    }
+
+    /// The mark reports the same state the rest of the window reports.
+    var ribbonMood: RibbonMood {
+        if didCopy { return .delivered }
+        if isBusy { return .working }
+        if issue != nil || snapshot.isStale || selectedAmbiguity != nil { return .unsettled }
+        return canCopyScript ? .armed : .idle
+    }
+
     var canRefresh: Bool { selectedTarget != nil && !isBusy }
     var canSwitchTarget: Bool { !isBusy }
     var copyButtonLabel: String { didCopy ? String(localized: "Copied") : String(localized: "Copy Script") }
@@ -222,6 +247,20 @@ final class AppModel: ObservableObject {
 
     func refresh() {
         guard !isBusy else { return }
+#if UI_FIXTURE
+        if let visualFixtureCatalog, let selectedTargetID {
+            isBusy = true
+            status = .loadingActions
+            didCopy = false
+            Task {
+                try? await Task.sleep(nanoseconds: 900_000_000)
+                snapshot = RefreshReducer.success(previous: snapshot, targetID: selectedTargetID, catalog: visualFixtureCatalog)
+                status = .connected
+                isBusy = false
+            }
+            return
+        }
+#endif
         rescanTargets(preserveSelection: true)
         guard let target = selectedTarget else {
             snapshot = .empty

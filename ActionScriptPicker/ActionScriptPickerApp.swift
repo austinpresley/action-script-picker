@@ -18,7 +18,7 @@ struct ActionScriptPickerApp: App {
         WindowGroup("Action Script Picker") {
             ContentView(model: model)
         }
-        .defaultSize(width: 900, height: 560)
+        .defaultSize(width: 1040, height: 640)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Show Window") {

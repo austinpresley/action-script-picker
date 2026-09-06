@@ -9,7 +9,7 @@ Turn a Photoshop action into a ready-to-paste AppleScript.
 
 Action Script Picker reads the actions already loaded in Photoshop. Pick one, copy the script, and paste it into Script Editor, Shortcuts, Stream Deck, or any other AppleScript runner. The app never runs the action itself.
 
-[Download Action Script Picker 1.0.0](https://github.com/austinpresley/action-script-picker/releases/download/v1.0.0/Action-Script-Picker-1.0.0.zip)
+[Download Action Script Picker 1.1.0](https://github.com/austinpresley/action-script-picker/releases/download/v1.1.0/Action-Script-Picker-1.1.0.zip)
 
 ## Use
 

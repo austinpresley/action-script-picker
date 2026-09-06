@@ -5,25 +5,32 @@ struct ContentView: View {
     @ObservedObject var model: AppModel
     @FocusState private var searchIsFocused: Bool
     @State private var usesCompactToolbar = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HSplitView {
-            sidebar
-                .frame(minWidth: 180, idealWidth: 220, maxWidth: 300, maxHeight: .infinity)
-            actionPane
-                .frame(minWidth: 220, idealWidth: 270, maxWidth: 400, maxHeight: .infinity)
-            previewPane
-                .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
-                .layoutPriority(1)
+        GeometryReader { geometry in
+            HSplitView {
+                sidebar(artworkHeight: min(148, max(48, geometry.size.height - 430)))
+                    .frame(minWidth: 220, idealWidth: 230, maxWidth: 300, maxHeight: .infinity)
+                actionPane
+                    .frame(minWidth: 220, idealWidth: 250, maxWidth: 400, maxHeight: .infinity)
+                previewPane
+                    .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
+                    .layoutPriority(1)
+            }
         }
         .frame(
             minWidth: 760,
-            idealWidth: 900,
+            idealWidth: 1040,
             maxWidth: .infinity,
             minHeight: 460,
-            idealHeight: 560,
+            idealHeight: 640,
             maxHeight: .infinity
         )
+        .foregroundStyle(PickerStyle.ink)
+        .tint(PickerStyle.accent)
+        .accentColor(PickerStyle.accent)
+        .background(PickerStyle.paper)
         .background(WindowAccessor(usesCompactToolbar: $usesCompactToolbar))
         .toolbar { toolbarContent }
         .task { model.startIfNeeded() }
@@ -32,30 +39,54 @@ struct ContentView: View {
         }
     }
 
-    private var sidebar: some View {
-        Group {
-            if model.snapshot.catalog.sets.isEmpty {
-                VStack(spacing: 12) {
-                    Spacer()
-                    Image(systemName: "square.stack.3d.up.slash")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                    Text("No action sets")
-                        .foregroundStyle(.secondary)
-                    Spacer()
+    private func sidebar(artworkHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                PickerMark()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Action Script")
+                        .font(.system(size: 14, weight: .semibold))
+                        .tracking(-0.3)
+                    Text("PICKER")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .tracking(2.8)
+                        .foregroundStyle(PickerStyle.secondary)
                 }
-                .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 85, alignment: .center)
+            .accessibilityElement(children: .combine)
+
+            HStack {
+                Eyebrow("ACTION SETS")
+                Spacer()
+                CountBadge(count: model.snapshot.catalog.sets.count)
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 10)
+
+            if model.snapshot.catalog.sets.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "square.stack.3d.up.slash")
+                        .font(.system(size: 23, weight: .light))
+                    Text("No action sets")
+                        .font(.system(size: 12))
+                }
+                .foregroundStyle(PickerStyle.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityElement(children: .combine)
             } else {
                 List(selection: setSelection) {
                     ForEach(model.snapshot.catalog.sets) { set in
-                        HStack(spacing: 7) {
-                            Text(set.name.isEmpty ? String(localized: "Unnamed set") : set.name)
+                        HStack(spacing: 9) {
+                            Image(systemName: model.snapshot.selection.setID == set.id ? "square.stack.3d.up.fill" : "square.stack.3d.up")
+                                .font(.system(size: 13, weight: .regular))
+                                .frame(width: 18)
+                            Text(displaySetName(set.name))
+                                .font(.system(size: 12, weight: model.snapshot.selection.setID == set.id ? .semibold : .regular))
                                 .lineLimit(1)
-                            Spacer(minLength: 4)
-                            Text(set.actions.count, format: .number)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 0)
+                            CountBadge(count: set.actions.count)
                             if AmbiguityAnalyzer.setIsAmbiguous(set, catalog: model.snapshot.catalog) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.caption)
@@ -63,23 +94,80 @@ struct ContentView: View {
                                     .accessibilityLabel("Ambiguous action set")
                             }
                         }
+                        .padding(.vertical, 7)
+                        .contentShape(Rectangle())
+                        .modifier(PickerRowSurface(selected: model.snapshot.selection.setID == set.id))
                         .tag(set.id)
+                        .help(displaySetName(set.name))
                         .accessibilityLabel(setAccessibilityLabel(set))
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
                     }
                 }
                 .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
                 .accessibilityLabel("Action sets")
             }
+
+            VStack(spacing: 7) {
+                ScriptRibbon(token: model.ribbonSignatureToken, mood: model.ribbonMood)
+                    .frame(height: artworkHeight)
+                HStack(spacing: 7) {
+                    Text("PHOTOSHOP")
+                    Image(systemName: "arrow.right")
+                    Text("APPLESCRIPT")
+                }
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .tracking(0.7)
+                .foregroundStyle(PickerStyle.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 22)
+            .accessibilityHidden(true)
+
+            HStack(spacing: 6) {
+                Image(systemName: "square.stack.3d.up")
+                Text("\(model.snapshot.catalog.sets.reduce(0) { $0 + $1.actions.count }) loaded actions")
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(PickerStyle.secondary)
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+            .overlay(alignment: .top) { Rectangle().fill(PickerStyle.rule).frame(height: 1) }
         }
+        .background(PickerStyle.sidebar)
     }
 
     private var actionPane: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 7) {
+                Eyebrow("LOADED ACTIONS")
+                HStack(alignment: .firstTextBaseline) {
+                    Text(model.selectedSet.map { displaySetName($0.name) } ?? String(localized: "Actions"))
+                        .font(.system(size: 19, weight: .semibold))
+                        .tracking(-0.5)
+                        .lineLimit(1)
+                        .help(model.selectedSet.map { displaySetName($0.name) } ?? String(localized: "Actions"))
+                    Spacer(minLength: 4)
+                    CountBadge(count: model.filteredActions.count)
+                }
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 85, alignment: .center)
             searchField
             actionStatusBanner
             actionPaneBody
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            HStack(spacing: 5) {
+                Image(systemName: "cursorarrow")
+                Text("Select an action to preview")
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(PickerStyle.secondary)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .overlay(alignment: .top) { Rectangle().fill(PickerStyle.rule).frame(height: 1) }
         }
+        .background(PickerStyle.paper)
     }
 
     @ViewBuilder
@@ -149,10 +237,12 @@ struct ContentView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12))
+                .foregroundStyle(searchIsFocused ? PickerStyle.accent : PickerStyle.secondary)
             TextField("Search actions", text: $model.searchText)
+                .font(.system(size: 12))
                 .textFieldStyle(.plain)
                 .focused($searchIsFocused)
                 .disabled(model.selectedSet == nil)
@@ -162,153 +252,295 @@ struct ContentView: View {
                     model.searchText = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(PickerStyle.secondary)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
+            } else {
+                Text("⌘F")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(PickerStyle.secondary)
+                    .accessibilityHidden(true)
             }
         }
-        .padding(.horizontal, 9)
-        .frame(height: 28)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
-        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color(nsColor: .separatorColor)))
-        .padding(10)
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .background(PickerStyle.editor, in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(searchIsFocused ? PickerStyle.accent : PickerStyle.rule, lineWidth: searchIsFocused ? 1.5 : 1)
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: searchIsFocused)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
         .fixedSize(horizontal: false, vertical: true)
     }
 
     private var actionList: some View {
         List(selection: actionSelection) {
             ForEach(model.filteredActions) { action in
-                HStack(spacing: 7) {
+                HStack(spacing: 10) {
                     Image(systemName: "play.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 9, weight: .medium))
+                        .frame(width: 26, height: 28)
+                        .background(PickerStyle.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
+                        .accessibilityHidden(true)
                     Text(action.name.isEmpty ? String(localized: "Unnamed action") : action.name)
+                        .font(.system(size: 12, weight: model.snapshot.selection.actionID == action.id ? .semibold : .regular))
                         .lineLimit(1)
-                    Spacer(minLength: 4)
+                    Spacer(minLength: 2)
                     if let set = model.selectedSet,
                        AmbiguityAnalyzer.ambiguity(for: action, in: set, catalog: model.snapshot.catalog) != nil {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
                             .accessibilityLabel("Ambiguous action reference")
+                    } else if model.snapshot.selection.actionID == action.id {
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 10, weight: .medium))
+                            .accessibilityHidden(true)
                     }
                 }
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+                .modifier(PickerRowSurface(selected: model.snapshot.selection.actionID == action.id))
                 .tag(action.id)
+                .help(action.name.isEmpty ? String(localized: "Unnamed action") : action.name)
                 .accessibilityLabel(actionAccessibilityLabel(action))
+                .listRowSeparator(.hidden)
             }
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
         .accessibilityLabel("Actions")
     }
 
     private var previewPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("AppleScript Preview")
-                        .font(.headline)
-                    if let action = model.selectedAction {
-                        Text(action.name.isEmpty ? String(localized: "Unnamed action") : action.name)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
-            }
+        VStack(alignment: .leading, spacing: 18) {
+            previewHeading
 
             if let ambiguity = model.selectedAmbiguity {
                 InlineMessage(symbol: "exclamationmark.triangle.fill", text: ambiguity.message, color: .orange)
-                Spacer(minLength: 0)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+                previewArtwork
             } else if let script = model.generatedScript {
-                SelectableTextView(text: script, accessibilityLabel: String(localized: "Generated AppleScript preview"))
+                ScriptPreview(script: script, didCopy: model.didCopy)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor)))
 
                 if let note = model.pathTargetingNote {
-                    InlineMessage(symbol: "location.fill", text: note, color: .secondary)
+                    InlineMessage(symbol: "location.fill", text: note, color: PickerStyle.secondary)
                 }
-            } else if model.selectedSet?.actions.isEmpty == true {
-                Spacer(minLength: 0)
+                copyFooter
             } else {
-                VStack(spacing: 10) {
-                    Spacer()
-                    Image(systemName: model.selectedAmbiguity == nil ? "chevron.left.forwardslash.chevron.right" : "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundStyle(.tertiary)
-                    Text(previewPlaceholder)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                previewArtwork
             }
         }
-        .padding(16)
+        .padding(24)
+        .background(PickerStyle.panel)
+    }
+
+    private var previewHeading: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Eyebrow("APPLESCRIPT PREVIEW")
+            VStack(alignment: .leading, spacing: 6) {
+                Text(model.selectedAction.map { $0.name.isEmpty ? String(localized: "Unnamed action") : $0.name } ?? String(localized: "An action. A script."))
+                    .font(.system(size: 29, weight: .regular, design: .serif))
+                    .tracking(-0.7)
+                    .lineLimit(1)
+                    .help(model.selectedAction?.name ?? String(localized: "Select an action to preview its AppleScript."))
+                HStack(spacing: 6) {
+                    Image(systemName: "square.stack.3d.up")
+                        .accessibilityHidden(true)
+                    Text(model.selectedSet.map { displaySetName($0.name) } ?? String(localized: "Your Photoshop actions, ready to use elsewhere."))
+                        .lineLimit(1)
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(PickerStyle.secondary)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var copyFooter: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(copyFooterTitle)
+                        .font(.system(size: 12, weight: .medium))
+                    Text("Script Editor, Shortcuts, Stream Deck.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(PickerStyle.secondary)
+                }
+                .fixedSize()
+                Spacer(minLength: 0)
+                copyButton
+            }
+            HStack {
+                copyButton
+                Spacer(minLength: 8)
+                Text("⇧⌘C")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(PickerStyle.secondary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var copyButton: some View {
+        Button(action: model.copyScript) {
+            HStack(spacing: 7) {
+                Image(systemName: model.didCopy ? "checkmark" : "doc.on.doc")
+                Text(model.copyButtonLabel)
+            }
+            .frame(width: 92)
+        }
+        .buttonStyle(PickerButtonStyle(prominent: true))
+        .fixedSize()
+        .disabled(!model.canCopyScript)
+        .help("Copy the generated AppleScript. Shift-Command-C.")
+        .accessibilityLabel("Copy Script")
+    }
+
+    private var copyFooterTitle: String {
+        if model.didCopy { return String(localized: "Copied to clipboard") }
+        if model.canCopyScript { return String(localized: "Take it into your workflow") }
+        return model.isBusy
+            ? String(localized: "Waiting for Photoshop")
+            : String(localized: "Refresh to copy this script")
+    }
+
+    private var previewArtwork: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 16) {
+                Spacer(minLength: 0)
+                ScriptRibbon(token: model.ribbonSignatureToken, mood: model.ribbonMood)
+                    .frame(width: min(260, geometry.size.width), height: min(190, geometry.size.height * 0.5))
+                VStack(spacing: 7) {
+                    Text(model.selectedAmbiguity != nil ? "Choose a unique action" : "Your next shortcut starts here.")
+                        .font(.system(size: 20, weight: .regular, design: .serif))
+                        .multilineTextAlignment(.center)
+                    Text(previewPlaceholder)
+                        .font(.system(size: 12))
+                        .foregroundStyle(PickerStyle.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 240)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .automatic) {
-            Menu {
-                ForEach(model.targets) { target in
-                    Button {
-                        model.selectTarget(id: target.id)
-                    } label: {
-                        if target.id == model.selectedTargetID {
-                            Label(model.pickerLabel(for: target), systemImage: "checkmark")
-                        } else {
-                            Text(model.pickerLabel(for: target))
-                        }
+        if #available(macOS 26.0, *) {
+            sourceToolbarItem.sharedBackgroundVisibility(.hidden)
+            ToolbarSpacer(.flexible)
+            coffeeToolbarItem.sharedBackgroundVisibility(.hidden)
+        } else {
+            sourceToolbarItem
+            ToolbarItem(id: "toolbar-spacer", placement: .principal) {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .accessibilityHidden(true)
+            }
+            coffeeToolbarItem
+        }
+    }
+
+    private var sourceToolbarItem: some ToolbarContent {
+        ToolbarItem(id: "photoshop-target", placement: .navigation) {
+            HStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: "square.stack.3d.up")
+                        .font(.system(size: 16, weight: .light))
+                        .foregroundStyle(PickerStyle.accent)
+                        .frame(width: 34, height: 34)
+                        .background(PickerStyle.accentWash.opacity(0.7), in: RoundedRectangle(cornerRadius: 10))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 3) {
+#if UI_FIXTURE
+                        Eyebrow("SAMPLE ACTIONS")
+#else
+                        Eyebrow("SOURCE APPLICATION")
+#endif
+                        sourceMenu
                     }
                 }
-                if !model.targets.isEmpty { Divider() }
-                Button("Choose Photoshop…", action: model.choosePhotoshop)
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "app.dashed")
-                    Text(model.targetMenuLabel)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: 220)
+                .frame(width: usesCompactToolbar ? 235 : 285, alignment: .leading)
+
+                Rectangle()
+                    .fill(PickerStyle.rule)
+                    .frame(width: 1, height: 26)
+                    .accessibilityHidden(true)
+
+                StatusView(status: model.status, compact: usesCompactToolbar)
+                    .help(model.status.label)
+
+                refreshButton
             }
-            .disabled(!model.canSwitchTarget)
-            .accessibilityLabel("Photoshop target")
+            .padding(.horizontal, 7)
+            .frame(height: 46, alignment: .leading)
         }
+    }
 
-        ToolbarItem(placement: .automatic) {
-            StatusView(status: model.status)
-        }
-
-        ToolbarItem(placement: .automatic) {
-            Button(action: model.refresh) {
-                if usesCompactToolbar {
-                    Image(systemName: "arrow.clockwise")
-                } else {
-                    HStack(spacing: 5) {
-                        Image(systemName: "arrow.clockwise")
-                        Text("Refresh")
+    private var sourceMenu: some View {
+        Menu {
+#if UI_FIXTURE
+            Text("Example actions for the design preview")
+            Button("Reload sample actions", action: model.refresh)
+#else
+            ForEach(model.targets) { target in
+                Button {
+                    model.selectTarget(id: target.id)
+                } label: {
+                    if target.id == model.selectedTargetID {
+                        Label(model.pickerLabel(for: target), systemImage: "checkmark")
+                    } else {
+                        Text(model.pickerLabel(for: target))
                     }
                 }
             }
-            .disabled(!model.canRefresh)
-            .keyboardShortcut("r", modifiers: .command)
-            .help("Refresh loaded actions")
-            .accessibilityLabel("Refresh")
+            if !model.targets.isEmpty { Divider() }
+            Button("Choose Photoshop…", action: model.choosePhotoshop)
+#endif
+        } label: {
+            Text(model.targetMenuLabel)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(PickerStyle.ink)
+                .lineLimit(1)
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.visible)
+        .disabled(!model.canSwitchTarget)
+        .help(model.targetMenuLabel)
+        .accessibilityLabel("Photoshop target")
+    }
 
-        ToolbarItem(id: "copy-script", placement: .confirmationAction) {
-            Button(action: model.copyScript) {
-                HStack(spacing: 5) {
-                    Image(systemName: model.didCopy ? "checkmark" : "doc.on.doc")
-                    Text(model.copyButtonLabel)
-                }
+    private var refreshButton: some View {
+        Button(action: model.refresh) {
+            RefreshGlyph(isBusy: model.isBusy)
+                .frame(width: 14, height: 14)
+        }
+        .buttonStyle(PickerButtonStyle())
+        .disabled(!model.canRefresh)
+        .keyboardShortcut("r", modifiers: .command)
+        .help("Refresh loaded actions. Command-R.")
+        .accessibilityLabel("Refresh")
+    }
+
+    private var coffeeToolbarItem: some ToolbarContent {
+        ToolbarItem(id: "buy-me-a-coffee", placement: .confirmationAction) {
+            Link(destination: URL(string: "https://buymeacoffee.com/apresley")!) {
+                Label("Buy me a coffee", systemImage: "cup.and.saucer.fill")
+                    .labelStyle(.titleAndIcon)
             }
-            .disabled(!model.canCopyScript)
-            .help("Copy the generated AppleScript")
-            .accessibilityLabel("Copy Script")
+            .buttonStyle(PickerButtonStyle())
+            .help("Support Action Script Picker")
+            .accessibilityHint("Opens buymeacoffee.com/apresley in your browser")
         }
     }
 
@@ -356,6 +588,7 @@ struct ContentView: View {
 
 private struct StatusView: View {
     let status: ConnectionStatus
+    var compact = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -365,10 +598,14 @@ private struct StatusView: View {
             } else {
                 Image(systemName: status.symbolName)
             }
-            Text(status.label)
-                .lineLimit(1)
+            if !compact {
+                Text(status.label)
+                    .lineLimit(1)
+            }
         }
-        .font(.callout)
+        .font(.system(size: 11, weight: .medium))
+        .padding(.horizontal, 4)
+        .padding(.vertical, 7)
         .foregroundStyle(color)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Photoshop status: \(status.label)")
@@ -376,9 +613,9 @@ private struct StatusView: View {
 
     private var color: Color {
         switch status {
-        case .connected: return .green
-        case .openingPhotoshop, .loadingActions: return .accentColor
-        case .photoshopMissing, .photoshopClosed: return .secondary
+        case .connected: return PickerStyle.success
+        case .openingPhotoshop, .loadingActions: return PickerStyle.accent
+        case .photoshopMissing, .photoshopClosed: return PickerStyle.secondary
         case .staleResults: return .orange
         case .automationPermissionRequired, .timedOut, .queryFailed: return .red
         }
@@ -441,8 +678,11 @@ private struct StatePane: View {
         VStack(spacing: 9) {
             Spacer()
             Image(systemName: symbol)
-                .font(.largeTitle)
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 23, weight: .light))
+                .foregroundStyle(PickerStyle.accent)
+                .frame(width: 62, height: 62)
+                .background(PickerStyle.accentWash.opacity(0.6), in: RoundedRectangle(cornerRadius: 18))
+                .padding(.bottom, 8)
             Text(title)
                 .font(.headline)
             Text(message)
@@ -452,7 +692,8 @@ private struct StatePane: View {
                 .frame(maxWidth: 280)
             if let buttonTitle, let action {
                 Button(buttonTitle, action: action)
-                    .padding(.top, 3)
+                    .buttonStyle(PickerButtonStyle())
+                    .padding(.top, 8)
             }
             Spacer()
         }
@@ -469,47 +710,10 @@ private struct InlineMessage: View {
 
     var body: some View {
         Label(text, systemImage: symbol)
-            .font(.callout)
+            .font(.system(size: 11))
             .foregroundStyle(color)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityElement(children: .combine)
-    }
-}
-
-private struct SelectableTextView: NSViewRepresentable {
-    let text: String
-    let accessibilityLabel: String
-
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = false
-
-        let textView = NSTextView()
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.drawsBackground = false
-        textView.font = .monospacedSystemFont(ofSize: 12.5, weight: .regular)
-        textView.textColor = .labelColor
-        textView.textContainerInset = NSSize(width: 12, height: 12)
-        textView.isHorizontallyResizable = false
-        textView.isVerticallyResizable = true
-        textView.autoresizingMask = [.width]
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.lineBreakMode = .byWordWrapping
-        textView.setAccessibilityLabel(accessibilityLabel)
-        scrollView.documentView = textView
-        return scrollView
-    }
-
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
-        if textView.string != text {
-            textView.string = text
-        }
-        textView.setAccessibilityLabel(accessibilityLabel)
     }
 }
 
@@ -536,9 +740,23 @@ private struct WindowAccessor: NSViewRepresentable {
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("ActionScriptPicker.MainWindow")
         window.minSize = NSSize(width: 760, height: 460)
-        window.titlebarAppearsTransparent = false
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = NSColor(PickerStyle.paper)
+        window.toolbarStyle = .unified
+        if #unavailable(macOS 15.0) { window.toolbar?.showsBaselineSeparator = false }
         window.styleMask.remove(.fullSizeContentView)
+        if let contentView = window.contentView {
+            configureLists(in: contentView)
+        }
         coordinator.observe(window)
+    }
+
+    private func configureLists(in view: NSView) {
+        if let table = view as? NSTableView {
+            // SwiftUI draws the selection; AppKit still owns focus, keyboard navigation, and accessibility.
+            table.selectionHighlightStyle = .none
+        }
+        for child in view.subviews { configureLists(in: child) }
     }
 
     @MainActor
@@ -570,8 +788,8 @@ private struct WindowAccessor: NSViewRepresentable {
 
         private func updateTitleVisibility() {
             guard let window else { return }
-            let isCompact = window.frame.width < 840
-            window.titleVisibility = isCompact ? .hidden : .visible
+            let isCompact = window.frame.width < 920
+            window.titleVisibility = .hidden
             if usesCompactToolbar.wrappedValue != isCompact {
                 usesCompactToolbar.wrappedValue = isCompact
             }

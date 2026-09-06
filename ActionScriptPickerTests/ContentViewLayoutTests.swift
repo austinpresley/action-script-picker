@@ -55,7 +55,7 @@ final class ContentViewLayoutTests: XCTestCase {
         )
 
         XCTAssertTrue(window.contentLayoutRect.contains(search.convert(search.bounds, to: nil)))
-        XCTAssertFalse(window.titlebarAppearsTransparent)
+        XCTAssertTrue(window.titlebarAppearsTransparent)
         XCTAssertFalse(window.styleMask.contains(.fullSizeContentView))
         XCTAssertFalse(
             descendants(of: host, matching: NSTextView.self)
@@ -63,15 +63,21 @@ final class ContentViewLayoutTests: XCTestCase {
         )
     }
 
-    func testMinimumWidthKeepsCopyScriptVisibleInToolbar() throws {
+    func testMinimumWidthKeepsToolbarGroupsSeparated() throws {
         let model = AppModel(uiFixture: try fixtureCatalog())
         let (window, _) = host(model, width: 760)
 
         let visibleItems = window.toolbar?.visibleItems ?? []
-        XCTAssertTrue(
+        XCTAssertFalse(
             visibleItems.contains(where: { $0.itemIdentifier.rawValue == "copy-script" }),
-            "Copy Script moved into overflow. Visible toolbar items: \(visibleItems.map(toolbarDescription))"
+            "Copy Script should only appear below the preview. Visible toolbar items: \(visibleItems.map(toolbarDescription))"
         )
+        let source = try XCTUnwrap(visibleItems.first { $0.itemIdentifier.rawValue == "photoshop-target" }?.view)
+        let coffee = try XCTUnwrap(visibleItems.first { $0.itemIdentifier.rawValue == "buy-me-a-coffee" }?.view)
+        XCTAssertGreaterThan(source.frame.width, 40)
+        XCTAssertGreaterThan(coffee.frame.width, 40)
+        XCTAssertFalse(source.convert(source.bounds, to: nil).intersects(coffee.convert(coffee.bounds, to: nil)))
+        XCTAssertEqual(window.titleVisibility, .hidden)
     }
 
     func testSwitchingSetsReplacesActionRows() throws {
@@ -84,6 +90,31 @@ final class ContentViewLayoutTests: XCTestCase {
         let rowCounts = descendants(of: host, matching: NSTableView.self).map(\.numberOfRows)
         XCTAssertTrue(rowCounts.contains(6), "Expected a six-row actions table, got \(rowCounts)")
         XCTAssertFalse(rowCounts.contains(67), "The previous set's action rows were retained: \(rowCounts)")
+    }
+
+    func testSyntaxColorsPreserveExactSourceAndSelectionWhenAppearanceChanges() throws {
+        let catalog = ActionCatalog(sets: [
+            LoadedActionSet(id: 0, name: "Portrait \"studio\"", actions: [
+                LoadedAction(id: 0, name: "Retouch\\finish\t肌\n✨")
+            ])
+        ])
+        let model = AppModel(uiFixture: catalog)
+        let (window, host) = host(model)
+        let preview = try XCTUnwrap(
+            descendants(of: host, matching: NSTextView.self)
+                .first(where: { $0.string.contains("tell application") })
+        )
+        XCTAssertEqual(preview.string, model.generatedScript)
+        let selection = NSRange(location: 5, length: 11)
+        preview.setSelectedRange(selection)
+
+        window.appearance = NSAppearance(named: .aqua)
+        settle(host)
+
+        XCTAssertEqual(preview.string, model.generatedScript)
+        XCTAssertEqual(preview.selectedRange(), selection)
+        XCTAssertFalse(preview.isEditable)
+        XCTAssertTrue(preview.isSelectable)
     }
 
     private func fixtureCatalog() throws -> ActionCatalog {
